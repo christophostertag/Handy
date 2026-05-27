@@ -16,6 +16,8 @@ const ELEVENLABS_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const ELEVENLABS_REQUEST_TIMEOUT: Duration = Duration::from_secs(90);
 const ELEVENLABS_PERMISSION_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 const ELEVENLABS_PERMISSION_PROBE_SAMPLES: usize = 1_600;
+const ELEVENLABS_TAG_AUDIO_EVENTS: &str = "false";
+const ELEVENLABS_NO_VERBATIM: &str = "true";
 const MAX_KEYTERMS: usize = 1000;
 
 #[derive(Deserialize)]
@@ -100,6 +102,8 @@ pub fn transcribe(audio: &[f32], settings: &AppSettings) -> Result<String> {
 
     let mut form = Form::new()
         .text("model_id", ELEVENLABS_DEFAULT_MODEL_ID.to_string())
+        .text("tag_audio_events", ELEVENLABS_TAG_AUDIO_EVENTS)
+        .text("no_verbatim", ELEVENLABS_NO_VERBATIM)
         .part("file", audio_part);
 
     if let Some(language_code) = normalize_language_code(&settings.selected_language) {

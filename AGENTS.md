@@ -9,6 +9,10 @@ This file provides guidance to AI coding assistants working with code in this re
 - [Rust](https://rustup.rs/) (latest stable)
 - [Bun](https://bun.sh/) package manager
 
+**macOS reinstall note:**
+
+- After reinstalling or replacing `/Applications/Handy.app`, reset Accessibility permissions so macOS re-prompts for approval: `tccutil reset Accessibility com.pais.handy`
+
 **Core Development:**
 
 ```bash

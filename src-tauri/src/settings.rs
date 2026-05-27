@@ -754,6 +754,11 @@ fn ensure_transcription_defaults(settings: &mut AppSettings) -> bool {
     changed
 }
 
+fn settings_value_missing_transcription_fields(settings_value: &serde_json::Value) -> bool {
+    settings_value.get("transcription_provider_id").is_none()
+        || settings_value.get("transcription_api_keys").is_none()
+}
+
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
 
 pub fn get_default_settings() -> AppSettings {
@@ -897,12 +902,15 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         .expect("Failed to initialize store");
 
     let mut settings = if let Some(settings_value) = store.get("settings") {
+        let missing_transcription_fields =
+            settings_value_missing_transcription_fields(&settings_value);
+
         // Parse the entire settings object
         match serde_json::from_value::<AppSettings>(settings_value) {
             Ok(mut settings) => {
                 debug!("Found existing settings: {:?}", settings);
                 let default_settings = get_default_settings();
-                let mut updated = false;
+                let mut updated = missing_transcription_fields;
 
                 // Merge default bindings into existing settings
                 for (key, value) in default_settings.bindings {
@@ -947,11 +955,22 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
         .expect("Failed to initialize store");
 
     let mut settings = if let Some(settings_value) = store.get("settings") {
-        serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
-            let default_settings = get_default_settings();
-            store.set("settings", serde_json::to_value(&default_settings).unwrap());
-            default_settings
-        })
+        let missing_transcription_fields =
+            settings_value_missing_transcription_fields(&settings_value);
+
+        match serde_json::from_value::<AppSettings>(settings_value) {
+            Ok(settings) => {
+                if missing_transcription_fields {
+                    store.set("settings", serde_json::to_value(&settings).unwrap());
+                }
+                settings
+            }
+            Err(_) => {
+                let default_settings = get_default_settings();
+                store.set("settings", serde_json::to_value(&default_settings).unwrap());
+                default_settings
+            }
+        }
     } else {
         let default_settings = get_default_settings();
         store.set("settings", serde_json::to_value(&default_settings).unwrap());
@@ -1052,5 +1071,24 @@ mod tests {
         assert!(settings
             .transcription_api_keys
             .contains_key(ELEVENLABS_TRANSCRIPTION_PROVIDER_ID));
+    }
+
+    #[test]
+    fn detects_missing_transcription_fields_in_legacy_settings() {
+        let value = serde_json::json!({
+            "selected_model": "parakeet-tdt-0.6b-v3"
+        });
+
+        assert!(settings_value_missing_transcription_fields(&value));
+
+        let value = serde_json::json!({
+            "selected_model": "parakeet-tdt-0.6b-v3",
+            "transcription_provider_id": "local",
+            "transcription_api_keys": {
+                "elevenlabs": ""
+            }
+        });
+
+        assert!(!settings_value_missing_transcription_fields(&value));
     }
 }

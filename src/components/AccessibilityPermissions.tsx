@@ -5,6 +5,7 @@ import {
   checkAccessibilityPermission,
   requestAccessibilityPermission,
 } from "tauri-plugin-macos-permissions-api";
+import { commands } from "@/bindings";
 
 // Define permission state type
 type PermissionState = "request" | "verify" | "granted";
@@ -37,6 +38,7 @@ const AccessibilityPermissions: React.FC = () => {
     if (permissionState === "request") {
       try {
         await requestAccessibilityPermission();
+        await commands.openAccessibilityPrivacySettings();
         // After system prompt, transition to verification state
         setPermissionState("verify");
       } catch (error) {

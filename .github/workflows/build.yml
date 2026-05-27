@@ -337,6 +337,12 @@ jobs:
             '.bundle.linux.deb.files["/usr/lib/libonnxruntime.so"] = $so | .bundle.linux.deb.files["/usr/lib/libonnxruntime.so.1"] = $so1 | .bundle.linux.deb.files["/usr/lib/libonnxruntime.so.1.24.2"] = $sov' \
             src-tauri/tauri.conf.json > tmp.json && mv tmp.json src-tauri/tauri.conf.json
 
+      - name: Disable Windows signing for unsigned builds
+        if: contains(inputs.platform, 'windows') && !inputs.sign-binaries
+        shell: bash
+        run: |
+          bun -e "const fs = require('fs'); const path = 'src-tauri/tauri.conf.json'; const config = JSON.parse(fs.readFileSync(path, 'utf8')); if (config.bundle?.windows?.signCommand) delete config.bundle.windows.signCommand; config.bundle.createUpdaterArtifacts = false; fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n');"
+
       - name: Build with Tauri
         uses: tauri-apps/tauri-action@v0
         env:
@@ -469,7 +475,7 @@ jobs:
           retention-days: 30
 
       - name: Resolve Windows artifact path
-        if: inputs.upload-artifacts && contains(inputs.platform, 'windows')
+        if: always() && inputs.upload-artifacts && contains(inputs.platform, 'windows')
         id: win-artifact-path
         shell: pwsh
         run: |
@@ -477,7 +483,7 @@ jobs:
           echo "base=$base" >> $env:GITHUB_OUTPUT
 
       - name: Upload artifacts (Windows)
-        if: inputs.upload-artifacts && contains(inputs.platform, 'windows')
+        if: always() && inputs.upload-artifacts && contains(inputs.platform, 'windows')
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.asset-prefix }}-${{ inputs.target }}

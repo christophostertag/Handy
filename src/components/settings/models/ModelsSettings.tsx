@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { invoke } from "@tauri-apps/api/core";
 import { ChevronDown, Globe } from "lucide-react";
 import type { ModelCardStatus } from "@/components/onboarding";
 import { ModelCard } from "@/components/onboarding";
@@ -215,11 +214,6 @@ export const ModelsSettings: React.FC = () => {
     setElevenLabsApiKeyError(null);
 
     try {
-      await invoke("verify_transcription_provider_api_key", {
-        providerId: ELEVENLABS_TRANSCRIPTION_PROVIDER_ID,
-        apiKey: trimmedApiKey,
-      });
-
       const saveResult = await commands.changeTranscriptionApiKeySetting(
         ELEVENLABS_TRANSCRIPTION_PROVIDER_ID,
         trimmedApiKey,
