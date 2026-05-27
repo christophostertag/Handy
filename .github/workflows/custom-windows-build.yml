@@ -1,0 +1,24 @@
+name: "Custom Windows Build"
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to build"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  windows-x64:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build.yml
+    with:
+      platform: "windows-latest"
+      target: "x86_64-pc-windows-msvc"
+      build-args: ""
+      sign-binaries: false
+      asset-prefix: "handy-custom"
+      upload-artifacts: true
+      ref: ${{ inputs.ref || github.ref }}
