@@ -9,6 +9,10 @@ This file provides guidance to AI coding assistants working with code in this re
 - [Rust](https://rustup.rs/) (latest stable)
 - [Bun](https://bun.sh/) package manager
 
+**macOS reinstall note:**
+
+- After reinstalling or replacing `/Applications/Handy.app`, reset Accessibility permissions so macOS re-prompts for approval: `tccutil reset Accessibility com.pais.handy`
+
 **Core Development:**
 
 ```bash
@@ -174,14 +178,14 @@ Handy supports command-line parameters on all platforms for integration with scr
 
 **Implementation:** `cli.rs` (definitions), `main.rs` (parsing), `lib.rs` (applying), `signal_handle.rs` (shared logic)
 
-| Flag                     | Description                                                    |
-| ------------------------ | -------------------------------------------------------------- |
-| `--toggle-transcription` | Toggle recording on/off on a running instance                  |
-| `--toggle-post-process`  | Toggle recording with post-processing on/off                   |
-| `--cancel`               | Cancel the current operation on a running instance             |
-| `--start-hidden`         | Launch without showing the main window (tray icon visible)     |
-| `--no-tray`              | Launch without system tray (closing window quits the app)      |
-| `--debug`                | Enable debug mode with verbose (Trace) logging                 |
+| Flag                     | Description                                                |
+| ------------------------ | ---------------------------------------------------------- |
+| `--toggle-transcription` | Toggle recording on/off on a running instance              |
+| `--toggle-post-process`  | Toggle recording with post-processing on/off               |
+| `--cancel`               | Cancel the current operation on a running instance         |
+| `--start-hidden`         | Launch without showing the main window (tray icon visible) |
+| `--no-tray`              | Launch without system tray (closing window quits the app)  |
+| `--debug`                | Enable debug mode with verbose (Trace) logging             |
 
 **Key design decisions:**
 
@@ -213,4 +217,4 @@ See the [Troubleshooting](README.md#troubleshooting) section in README.md.
 - **Translations:** Follow [CONTRIBUTING_TRANSLATIONS.md](CONTRIBUTING_TRANSLATIONS.md).
 - **Full contributor workflow:** [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Commits:** Use conventional commit prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`). Focus the message on *why*, not *what*.
+**Commits:** Use conventional commit prefixes (`feat:`, `fix:`, `docs:`, `refactor:`, `chore:`). Focus the message on _why_, not _what_.

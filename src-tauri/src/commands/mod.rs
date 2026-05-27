@@ -127,6 +127,55 @@ pub fn check_apple_intelligence_available() -> bool {
     }
 }
 
+#[specta::specta]
+#[tauri::command]
+pub fn open_accessibility_privacy_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+            .spawn()
+            .map_err(|e| format!("Failed to open macOS Accessibility settings: {}", e))?;
+        return Ok(());
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("Opening Accessibility settings is only supported on macOS".to_string())
+    }
+}
+
+#[specta::specta]
+#[tauri::command]
+pub fn reset_accessibility_permission(app: AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        let identifier = app.config().identifier.clone();
+        let output = std::process::Command::new("tccutil")
+            .args(["reset", "Accessibility", identifier.as_str()])
+            .output()
+            .map_err(|e| format!("Failed to reset macOS Accessibility permission: {}", e))?;
+
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        return Err(format!(
+            "Failed to reset macOS Accessibility permission: {}{}",
+            stderr.trim(),
+            stdout.trim()
+        ));
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = app;
+        Err("Resetting Accessibility permission is only supported on macOS".to_string())
+    }
+}
+
 /// Try to initialize Enigo (keyboard/mouse simulation).
 /// On macOS, this will return an error if accessibility permissions are not granted.
 #[specta::specta]

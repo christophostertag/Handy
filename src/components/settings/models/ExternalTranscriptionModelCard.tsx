@@ -266,8 +266,8 @@ export const ExternalTranscriptionModelCard: React.FC<
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       <span>
-                        {t("settings.models.external.apiKey.verifying", {
-                          defaultValue: "Verifying...",
+                        {t("common.saving", {
+                          defaultValue: "Saving...",
                         })}
                       </span>
                     </>

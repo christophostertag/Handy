@@ -41,8 +41,10 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
     accessibility: "checking",
     microphone: "checking",
   });
+  const [showAccessibilityRepair, setShowAccessibilityRepair] = useState(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const repairTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorCountRef = useRef<number>(0);
   const MAX_POLLING_ERRORS = 3;
 
@@ -192,6 +194,7 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
 
           if (accessibilityGranted && prev.accessibility !== "granted") {
             newState.accessibility = "granted";
+            setShowAccessibilityRepair(false);
             // Initialize Enigo and shortcuts when accessibility is granted
             Promise.all([
               commands.initializeEnigo(),
@@ -244,17 +247,51 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
+      if (repairTimeoutRef.current) {
+        clearTimeout(repairTimeoutRef.current);
+      }
     };
   }, []);
 
+  const scheduleAccessibilityRepair = () => {
+    if (repairTimeoutRef.current) {
+      clearTimeout(repairTimeoutRef.current);
+    }
+    repairTimeoutRef.current = setTimeout(() => {
+      setShowAccessibilityRepair(true);
+    }, 8000);
+  };
+
   const handleGrantAccessibility = async () => {
     try {
+      setShowAccessibilityRepair(false);
       await requestAccessibilityPermission();
+      await commands.openAccessibilityPrivacySettings();
       setPermissions((prev) => ({ ...prev, accessibility: "waiting" }));
       startPolling();
+      scheduleAccessibilityRepair();
     } catch (error) {
       console.error("Failed to request accessibility permission:", error);
       toast.error(t("onboarding.permissions.errors.requestFailed"));
+    }
+  };
+
+  const handleRepairAccessibility = async () => {
+    try {
+      setShowAccessibilityRepair(false);
+      const resetResult = await commands.resetAccessibilityPermission();
+      if (resetResult.status === "error") {
+        throw new Error(resetResult.error);
+      }
+      await requestAccessibilityPermission();
+      await commands.openAccessibilityPrivacySettings();
+      setPermissions((prev) => ({ ...prev, accessibility: "waiting" }));
+      startPolling();
+      scheduleAccessibilityRepair();
+    } catch (error) {
+      console.error("Failed to repair accessibility permission:", error);
+      toast.error(t("onboarding.permissions.errors.requestFailed"));
+      setShowAccessibilityRepair(true);
     }
   };
 
@@ -380,9 +417,20 @@ const AccessibilityOnboarding: React.FC<AccessibilityOnboardingProps> = ({
                     {t("onboarding.permissions.granted")}
                   </div>
                 ) : permissions.accessibility === "waiting" ? (
-                  <div className="flex items-center gap-2 text-text/50 text-sm">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {t("onboarding.permissions.waiting")}
+                  <div className="flex flex-col items-start gap-2">
+                    <div className="flex items-center gap-2 text-text/50 text-sm">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      {t("onboarding.permissions.waiting")}
+                    </div>
+                    {showAccessibilityRepair && (
+                      <button
+                        onClick={handleRepairAccessibility}
+                        className="px-4 py-2 rounded-lg bg-mid-gray/20 hover:bg-mid-gray/30 border border-mid-gray/40 text-text text-sm font-medium transition-colors"
+                      >
+                        {t("settings.reset")} &{" "}
+                        {t("accessibility.openSettings")}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <button
