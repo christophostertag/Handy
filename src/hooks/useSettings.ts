@@ -31,6 +31,11 @@ interface UseSettingsReturn {
 
   // Post-processing helpers
   setPostProcessProvider: (providerId: string) => Promise<void>;
+  setTranscriptionProvider: (providerId: string) => Promise<void>;
+  updateTranscriptionApiKey: (
+    providerId: string,
+    apiKey: string,
+  ) => Promise<void>;
   updatePostProcessBaseUrl: (
     providerId: string,
     baseUrl: string,
@@ -70,6 +75,8 @@ export const useSettings = (): UseSettingsReturn => {
     resetBinding: store.resetBinding,
     getSetting: store.getSetting,
     setPostProcessProvider: store.setPostProcessProvider,
+    setTranscriptionProvider: store.setTranscriptionProvider,
+    updateTranscriptionApiKey: store.updateTranscriptionApiKey,
     updatePostProcessBaseUrl: store.updatePostProcessBaseUrl,
     updatePostProcessApiKey: store.updatePostProcessApiKey,
     updatePostProcessModel: store.updatePostProcessModel,

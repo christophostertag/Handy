@@ -9,6 +9,13 @@ import ModelDropdown from "./ModelDropdown";
 import DownloadProgressDisplay from "./DownloadProgressDisplay";
 
 import { ModelStateEvent } from "@/lib/types/events";
+import { useSettings } from "@/hooks/useSettings";
+import {
+  ELEVENLABS_SCRIBE_MODEL_NAME,
+  ELEVENLABS_TRANSCRIPTION_PROVIDER_ID,
+  getTranscriptionProviderId,
+  hasTranscriptionProviderApiKey,
+} from "@/lib/utils/transcriptionProvider";
 
 type ModelStatus =
   | "ready"
@@ -35,6 +42,14 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
     extractingModels,
     selectModel,
   } = useModelStore();
+  const { settings, refreshSettings, setTranscriptionProvider } = useSettings();
+  const transcriptionProviderId = getTranscriptionProviderId(settings);
+  const isScribeActive =
+    transcriptionProviderId === ELEVENLABS_TRANSCRIPTION_PROVIDER_ID;
+  const isScribeConfigured = hasTranscriptionProviderApiKey(
+    settings,
+    ELEVENLABS_TRANSCRIPTION_PROVIDER_ID,
+  );
 
   const [modelStatus, setModelStatus] = useState<ModelStatus>("unloaded");
   const [modelError, setModelError] = useState<string | null>(null);
@@ -49,6 +64,13 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
   // Check model status when currentModel changes
   useEffect(() => {
     const checkStatus = async () => {
+      if (isScribeActive) {
+        setModelStatus(isScribeConfigured ? "ready" : "none");
+        setModelError(null);
+        setPendingModelId(null);
+        return;
+      }
+
       if (currentModel) {
         try {
           const statusResult = await commands.getTranscriptionModelStatus();
@@ -66,13 +88,14 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
       }
     };
     checkStatus();
-  }, [currentModel]);
+  }, [currentModel, isScribeActive, isScribeConfigured]);
 
   useEffect(() => {
     // Listen for model loading lifecycle events
     const modelStateUnlisten = listen<ModelStateEvent>(
       "model-state-changed",
       (event) => {
+        if (isScribeActive) return;
         const { event_type, error } = event.payload;
         switch (event_type) {
           case "loading_started":
@@ -112,6 +135,8 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
               const success = await selectModel(modelId);
               if (!success) {
                 setPendingModelId(null);
+              } else {
+                await refreshSettings();
               }
             }
           } catch {
@@ -138,7 +163,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
       modelStateUnlisten.then((fn) => fn());
       downloadCompleteUnlisten.then((fn) => fn());
     };
-  }, [selectModel]);
+  }, [isScribeActive, refreshSettings, selectModel]);
 
   const handleModelSelect = async (modelId: string) => {
     setPendingModelId(modelId);
@@ -150,10 +175,30 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
       setModelStatus("error");
       setModelError("Failed to switch model");
       onError?.("Failed to switch model");
+    } else {
+      await refreshSettings();
+    }
+  };
+
+  const handleScribeSelect = async () => {
+    if (!isScribeConfigured) return;
+
+    setModelError(null);
+    setShowModelDropdown(false);
+    try {
+      await setTranscriptionProvider(ELEVENLABS_TRANSCRIPTION_PROVIDER_ID);
+      setPendingModelId(null);
+      setModelStatus("ready");
+    } catch {
+      setModelStatus("error");
+      setModelError(t("settings.scribeProvider.switchFailed"));
+      onError?.(t("settings.scribeProvider.switchFailed"));
     }
   };
 
   const getModelDisplayText = (): string => {
+    if (isScribeActive) return ELEVENLABS_SCRIBE_MODEL_NAME;
+
     const verifyingKeys = Object.keys(verifyingModels);
     if (verifyingKeys.length > 0) {
       if (verifyingKeys.length === 1) {
@@ -236,6 +281,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
 
   // Derive display status from model status + store state
   const getDisplayStatus = (): ModelStatus => {
+    if (isScribeActive) return isScribeConfigured ? "ready" : "none";
     if (Object.keys(verifyingModels).length > 0) return "verifying";
     if (Object.keys(extractingModels).length > 0) return "extracting";
     if (Object.keys(downloadProgress).length > 0) return "downloading";
@@ -258,7 +304,10 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
           <ModelDropdown
             models={models}
             currentModelId={displayModelId}
+            transcriptionProviderId={transcriptionProviderId}
+            isScribeConfigured={isScribeConfigured}
             onModelSelect={handleModelSelect}
+            onScribeSelect={handleScribeSelect}
           />
         )}
       </div>

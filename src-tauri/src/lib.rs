@@ -8,6 +8,7 @@ mod catalog;
 pub mod cli;
 mod clipboard;
 mod commands;
+mod elevenlabs_stt;
 mod helpers;
 mod input;
 mod llm_client;
@@ -20,7 +21,9 @@ mod secure_input;
 mod settings;
 mod shortcut;
 mod signal_handle;
+mod transcript_normalizer;
 mod transcription_coordinator;
+mod transcription_router;
 mod tray;
 mod tray_i18n;
 mod utils;
@@ -291,8 +294,10 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             }
             id if id.starts_with("model_select:") => {
                 let model_id = id.strip_prefix("model_select:").unwrap().to_string();
-                let current_model = settings::get_settings(app).selected_model;
-                if model_id == current_model {
+                let current_settings = settings::get_settings(app);
+                if model_id == current_settings.selected_model
+                    && current_settings.uses_local_transcription_provider()
+                {
                     return;
                 }
                 let app_clone = app.clone();
@@ -643,6 +648,8 @@ pub fn run(cli_args: CliArgs) {
             shortcut::change_auto_submit_key_setting,
             shortcut::change_post_process_enabled_setting,
             shortcut::change_experimental_enabled_setting,
+            shortcut::set_transcription_provider,
+            shortcut::change_transcription_api_key_setting,
             shortcut::change_post_process_base_url_setting,
             shortcut::change_post_process_api_key_setting,
             shortcut::change_post_process_model_setting,

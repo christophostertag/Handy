@@ -155,6 +155,29 @@
     "legacy": "Eski"
   },
   "settings": {
+    "scribeProvider": {
+      "sectionTitle": "Cloud Models",
+      "description": "Highly accurate multilingual cloud transcription powered by ElevenLabs.",
+      "working": "Working…",
+      "active": "Active",
+      "activate": "Activate",
+      "multilingual": "Multilingual",
+      "cloud": "Cloud",
+      "privacyDisclosure": "Recorded audio is sent to ElevenLabs for transcription. ElevenLabs provider usage may be billed to your account.",
+      "customWordsBilling": "Using more than 100 Custom Words (keyterms) can trigger a 20-second minimum billable duration on ElevenLabs.",
+      "apiKeyLabel": "ElevenLabs API key",
+      "apiKeyPlaceholder": "Enter your ElevenLabs API key",
+      "keyRequired": "Save an API key before activating Scribe v2.",
+      "saveFailed": "Failed to save the transcription provider setting.",
+      "saving": "Saving…",
+      "switchFailed": "Failed to switch transcription provider.",
+      "cloudDescription": "Cloud transcription",
+      "configureInModels": "Configure an API key in Models first",
+      "edit": "Edit",
+      "remove": "Remove",
+      "save": "Save",
+      "cancel": "Cancel"
+    },
     "modelSettings": {
       "title": "{{model}} Ayarları"
     },

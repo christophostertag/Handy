@@ -118,6 +118,13 @@ fn should_use_streaming_overlay(style: OverlayStyle, is_streaming: bool) -> bool
     style == OverlayStyle::Live && is_streaming
 }
 
+fn should_start_local_stream(
+    uses_local_transcription_provider: bool,
+    model_supports_streaming: bool,
+) -> bool {
+    uses_local_transcription_provider && model_supports_streaming
+}
+
 async fn post_process_transcription(settings: &AppSettings, transcription: &str) -> Option<String> {
     if is_blank_transcription(transcription) {
         debug!("Post-processing skipped because the transcription is empty");
@@ -404,6 +411,9 @@ pub(crate) struct ProcessedTranscription {
 /// resolves it independently so it agrees with the language the transcription ran
 /// in, without threading a value through the pipeline.
 fn resolve_effective_language(app: &AppHandle, settings: &AppSettings) -> String {
+    if !settings.uses_local_transcription_provider() {
+        return settings.selected_language.clone();
+    }
     let tm = app.state::<Arc<TranscriptionManager>>();
     let model_manager = app.state::<Arc<ModelManager>>();
     let active_model = tm
@@ -458,6 +468,15 @@ pub(crate) async fn process_transcription_output(
         post_processed_text = Some(final_text.clone());
     }
 
+    let normalized = crate::transcript_normalizer::normalize_custom_word_emails(
+        &final_text,
+        &settings.custom_words,
+    );
+    if normalized != final_text {
+        final_text = normalized;
+        post_processed_text = Some(final_text.clone());
+    }
+
     ProcessedTranscription {
         final_text,
         post_processed_text,
@@ -474,9 +493,17 @@ impl ShortcutAction for TranscribeAction {
         let tm = app.state::<Arc<TranscriptionManager>>();
         let rm = app.state::<Arc<AudioRecordingManager>>();
 
-        // Load ASR model and VAD model in parallel
+        let settings = get_settings(app);
+        let uses_local_provider = settings.uses_local_transcription_provider();
+
+        // Load the local ASR model only when it is the active provider. VAD is
+        // still local for both providers and can be preloaded in parallel.
         let kickoff_started = Instant::now();
-        tm.initiate_model_load();
+        if uses_local_provider {
+            tm.initiate_model_load();
+        } else {
+            tm.cancel_stream();
+        }
         let rm_clone = Arc::clone(&rm);
         std::thread::spawn(move || {
             if let Err(e) = rm_clone.preload_vad() {
@@ -492,7 +519,6 @@ impl ShortcutAction for TranscribeAction {
 
         // Get the microphone mode to determine audio feedback timing
         let plan_started = Instant::now();
-        let settings = get_settings(app);
         let is_always_on = settings.always_on_microphone;
 
         let selected_model_info = app
@@ -502,10 +528,13 @@ impl ShortcutAction for TranscribeAction {
         // Use the app-facing model capability as the single pre-recording source
         // for live streaming decisions. Unknown support is represented as false
         // until the model registry is updated by discovery or runtime load.
-        let model_supports_streaming = selected_model_info
-            .as_ref()
-            .map(|m| m.supports_streaming)
-            .unwrap_or(false);
+        let model_supports_streaming = should_start_local_stream(
+            uses_local_provider,
+            selected_model_info
+                .as_ref()
+                .map(|m| m.supports_streaming)
+                .unwrap_or(false),
+        );
         let vad_policy = if !settings.vad_enabled {
             VadPolicy::Disabled
         } else if model_supports_streaming {
@@ -651,10 +680,13 @@ impl ShortcutAction for TranscribeAction {
         // the larger panel, but it still switches from listening to a working
         // spinner while the stream finalizes. Non-streaming paths use the
         // compact transcribing pill (None no-ops in show_*).
-        let style = get_settings(app).overlay_style;
+        let transcription_settings = get_settings(app);
+        let uses_local_provider = transcription_settings.uses_local_transcription_provider();
+        let style = transcription_settings.overlay_style;
         // Capture this before finalizing the stream so every later working state
         // targets the same overlay that was shown for this transcription.
-        let use_streaming_overlay = should_use_streaming_overlay(style, tm.is_streaming());
+        let use_streaming_overlay =
+            uses_local_provider && should_use_streaming_overlay(style, tm.is_streaming());
         if use_streaming_overlay {
             tm.emit_stream_working(StreamWorkKind::Transcribing);
         } else {
@@ -716,16 +748,40 @@ impl ShortcutAction for TranscribeAction {
                     // running, finalize it and use its text (all audio was already
                     // fed to the stream); otherwise batch-transcribe the samples.
                     let transcription_time = Instant::now();
-                    let transcription_result = match tm.finalize_stream() {
-                        // A finalized stream with usable text wins. An empty result
-                        // (no active stream, produced nothing, or a finalize error
-                        // after the engine was returned) falls back to a full batch
-                        // transcription of the same audio. A finalize timeout is
-                        // surfaced instead — the worker may still hold the engine,
-                        // so a batch fallback would contend with it.
-                        Ok(Some(text)) if !text.trim().is_empty() => Ok(text),
-                        Ok(_) => tm.transcribe(samples),
-                        Err(err) => Err(err),
+                    let transcription_result = if uses_local_provider {
+                        // A running local engine cannot be aborted safely once
+                        // spawn_blocking has started. Await it to completion and
+                        // suppress its output below when the user cancels rather
+                        // than detaching it and allowing a second transcription
+                        // to contend for the same engine/model lock.
+                        Some(match tm.finalize_stream() {
+                            // A finalized stream with usable text wins. An
+                            // empty result falls back to local batch mode.
+                            Ok(Some(text)) if !text.trim().is_empty() => Ok(text),
+                            Ok(_) => {
+                                crate::transcription_router::transcribe_interactive(
+                                    &transcription_settings,
+                                    Arc::clone(&tm),
+                                    samples,
+                                )
+                                .await
+                            }
+                            Err(err) => Err(err.to_string()),
+                        })
+                    } else {
+                        // A remembered streaming-capable local model must never
+                        // start/finalize while Scribe is authoritative. The
+                        // remote HTTP future is safe to drop on cancellation.
+                        tm.cancel_stream();
+                        complete_unless_cancelled(
+                            crate::transcription_router::transcribe_interactive(
+                                &transcription_settings,
+                                Arc::clone(&tm),
+                                samples,
+                            ),
+                            || rm.was_cancelled_since(cancel_generation),
+                        )
+                        .await
                     };
 
                     // Await WAV save and verify
@@ -759,12 +815,19 @@ impl ShortcutAction for TranscribeAction {
                         return;
                     }
 
+                    let Some(transcription_result) = transcription_result else {
+                        debug!("Transcription operation cancelled during transcription");
+                        utils::hide_recording_overlay(&ah);
+                        set_tray_state(&ah, TrayIconState::Idle);
+                        return;
+                    };
+
                     match transcription_result {
                         Ok(transcription) => {
                             debug!(
-                                "Transcription completed in {:?}: '{}'",
+                                "Transcription completed in {:?} ({} chars)",
                                 transcription_time.elapsed(),
-                                transcription
+                                transcription.chars().count()
                             );
 
                             if post_process {
@@ -952,8 +1015,8 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
 #[cfg(test)]
 mod tests {
     use super::{
-        complete_unless_cancelled, is_blank_transcription, should_use_streaming_overlay,
-        strip_think_block,
+        complete_unless_cancelled, is_blank_transcription, should_start_local_stream,
+        should_use_streaming_overlay, strip_think_block,
     };
     use crate::settings::OverlayStyle;
     use std::future;
@@ -1035,5 +1098,12 @@ mod tests {
         assert!(!should_use_streaming_overlay(OverlayStyle::Live, false));
         assert!(!should_use_streaming_overlay(OverlayStyle::Minimal, true));
         assert!(!should_use_streaming_overlay(OverlayStyle::None, true));
+    }
+
+    #[test]
+    fn remote_provider_never_starts_remembered_local_streaming_model() {
+        assert!(should_start_local_stream(true, true));
+        assert!(!should_start_local_stream(false, true));
+        assert!(!should_start_local_stream(true, false));
     }
 }

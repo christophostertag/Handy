@@ -23,7 +23,8 @@ use crate::settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID;
 use crate::settings::{
     self, get_settings, AutoSubmitKey, ClipboardHandling, KeyboardImplementation, LLMPrompt,
     OverlayPosition, OverlayStyle, PasteMethod, ShortcutBinding, SoundTheme, Theme, TypingTool,
-    APPLE_INTELLIGENCE_PROVIDER_ID,
+    APPLE_INTELLIGENCE_PROVIDER_ID, ELEVENLABS_TRANSCRIPTION_PROVIDER_ID,
+    LOCAL_TRANSCRIPTION_PROVIDER_ID,
 };
 use crate::tray;
 
@@ -1010,6 +1011,78 @@ pub fn change_experimental_enabled_setting(app: AppHandle, enabled: bool) -> Res
     let mut settings = settings::get_settings(&app);
     settings.experimental_enabled = enabled;
     settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn set_transcription_provider(app: AppHandle, provider_id: String) -> Result<(), String> {
+    if !matches!(
+        provider_id.as_str(),
+        LOCAL_TRANSCRIPTION_PROVIDER_ID | ELEVENLABS_TRANSCRIPTION_PROVIDER_ID
+    ) {
+        return Err("Unsupported transcription provider.".to_string());
+    }
+
+    let mut settings = settings::get_settings(&app);
+    if provider_id == ELEVENLABS_TRANSCRIPTION_PROVIDER_ID
+        && settings.elevenlabs_api_key().is_none()
+    {
+        return Err("Add an ElevenLabs API key before activating Scribe v2.".to_string());
+    }
+
+    settings.transcription_provider_id = provider_id.clone();
+    settings::write_settings(&app, settings);
+
+    if provider_id == ELEVENLABS_TRANSCRIPTION_PROVIDER_ID {
+        app.state::<std::sync::Arc<crate::managers::transcription::TranscriptionManager>>()
+            .cancel_stream();
+    }
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({
+            "setting": "transcription_provider_id",
+            "value": provider_id
+        }),
+    );
+    crate::tray::update_tray_menu(&app);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_transcription_api_key_setting(
+    app: AppHandle,
+    provider_id: String,
+    api_key: String,
+) -> Result<(), String> {
+    if provider_id != ELEVENLABS_TRANSCRIPTION_PROVIDER_ID {
+        return Err("Unsupported transcription provider.".to_string());
+    }
+
+    let api_key = api_key.trim().to_string();
+    if api_key.len() > 512 || api_key.chars().any(char::is_control) {
+        return Err("The ElevenLabs API key contains invalid characters.".to_string());
+    }
+    let configured = !api_key.is_empty();
+    let mut settings = settings::get_settings(&app);
+    settings
+        .transcription_api_keys
+        .insert(provider_id.clone(), api_key);
+    if !configured && settings.transcription_provider_id == provider_id {
+        settings.transcription_provider_id = LOCAL_TRANSCRIPTION_PROVIDER_ID.to_string();
+    }
+    settings::write_settings(&app, settings);
+
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({
+            "setting": "transcription_api_key",
+            "provider_id": provider_id,
+            "configured": configured
+        }),
+    );
+    crate::tray::update_tray_menu(&app);
     Ok(())
 }
 

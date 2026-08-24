@@ -155,6 +155,29 @@
     "legacy": "Veraltet"
   },
   "settings": {
+    "scribeProvider": {
+      "sectionTitle": "Cloud-Modelle",
+      "description": "Hochpräzise mehrsprachige Cloud-Transkription von ElevenLabs.",
+      "working": "Wird ausgeführt…",
+      "active": "Aktiv",
+      "activate": "Aktivieren",
+      "multilingual": "Mehrsprachig",
+      "cloud": "Cloud",
+      "privacyDisclosure": "Die Audioaufnahme wird zur Transkription an ElevenLabs gesendet. Für die Nutzung des Anbieters können Kosten in deinem ElevenLabs-Konto anfallen.",
+      "customWordsBilling": "Bei mehr als 100 benutzerdefinierten Wörtern (Keyterms) kann bei ElevenLabs eine Mindestabrechnung von 20 Sekunden greifen.",
+      "apiKeyLabel": "ElevenLabs-API-Schlüssel",
+      "apiKeyPlaceholder": "ElevenLabs-API-Schlüssel eingeben",
+      "keyRequired": "Speichere zuerst einen API-Schlüssel, bevor du Scribe v2 aktivierst.",
+      "saveFailed": "Die Einstellung des Transkriptionsanbieters konnte nicht gespeichert werden.",
+      "saving": "Wird gespeichert…",
+      "switchFailed": "Der Transkriptionsanbieter konnte nicht gewechselt werden.",
+      "cloudDescription": "Cloud-Transkription",
+      "configureInModels": "Zuerst unter Modelle einen API-Schlüssel einrichten",
+      "edit": "Bearbeiten",
+      "remove": "Entfernen",
+      "save": "Speichern",
+      "cancel": "Abbrechen"
+    },
     "modelSettings": {
       "title": "{{model}}-Einstellungen"
     },

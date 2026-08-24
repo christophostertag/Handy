@@ -18,6 +18,14 @@ import {
   supportsLanguageCode,
 } from "@/lib/constants/languages.ts";
 import type { ModelInfo } from "@/bindings";
+import { useSettings } from "@/hooks/useSettings";
+import {
+  ELEVENLABS_TRANSCRIPTION_PROVIDER_ID,
+  getTranscriptionProviderId,
+  hasTranscriptionProviderApiKey,
+  LOCAL_TRANSCRIPTION_PROVIDER_ID,
+} from "@/lib/utils/transcriptionProvider";
+import { ScribeProviderCard } from "./ScribeProviderCard";
 
 // check if model supports a language based on its supported_languages list
 const modelSupportsLanguage = (model: ModelInfo, langCode: string): boolean => {
@@ -39,6 +47,8 @@ export const ModelsSettings: React.FC = () => {
   const [languageFilter, setLanguageFilter] = useState("all");
   const [languageDropdownOpen, setLanguageDropdownOpen] = useState(false);
   const [languageSearch, setLanguageSearch] = useState("");
+  const [scribeBusy, setScribeBusy] = useState(false);
+  const [scribeError, setScribeError] = useState<string | null>(null);
   const languageDropdownRef = useRef<HTMLDivElement>(null);
   const languageSearchInputRef = useRef<HTMLInputElement>(null);
   const {
@@ -57,6 +67,21 @@ export const ModelsSettings: React.FC = () => {
     deleteModel,
     rescanLocalModels,
   } = useModelStore();
+  const {
+    settings,
+    refreshSettings,
+    setTranscriptionProvider,
+    updateTranscriptionApiKey,
+  } = useSettings();
+  const transcriptionProviderId = getTranscriptionProviderId(settings);
+  const usesLocalProvider =
+    transcriptionProviderId === LOCAL_TRANSCRIPTION_PROVIDER_ID;
+  const isScribeActive =
+    transcriptionProviderId === ELEVENLABS_TRANSCRIPTION_PROVIDER_ID;
+  const isScribeConfigured = hasTranscriptionProviderApiKey(
+    settings,
+    ELEVENLABS_TRANSCRIPTION_PROVIDER_ID,
+  );
 
   // click outside handler for language dropdown
   useEffect(() => {
@@ -108,7 +133,7 @@ export const ModelsSettings: React.FC = () => {
     if (switchingModelId === modelId) {
       return "switching";
     }
-    if (modelId === currentModel) {
+    if (usesLocalProvider && modelId === currentModel) {
       return "active";
     }
     const model = models.find((m: ModelInfo) => m.id === modelId);
@@ -131,9 +156,64 @@ export const ModelsSettings: React.FC = () => {
   const handleModelSelect = async (modelId: string) => {
     setSwitchingModelId(modelId);
     try {
-      await selectModel(modelId);
+      const success = await selectModel(modelId);
+      if (success) await refreshSettings();
     } finally {
       setSwitchingModelId(null);
+    }
+  };
+
+  const getScribeErrorMessage = (error: unknown): string =>
+    error instanceof Error
+      ? error.message
+      : t("settings.scribeProvider.saveFailed");
+
+  const handleScribeActivate = async () => {
+    if (!isScribeConfigured) {
+      setScribeError(t("settings.scribeProvider.keyRequired"));
+      return;
+    }
+
+    setScribeBusy(true);
+    setScribeError(null);
+    try {
+      await setTranscriptionProvider(ELEVENLABS_TRANSCRIPTION_PROVIDER_ID);
+    } catch (error) {
+      setScribeError(getScribeErrorMessage(error));
+    } finally {
+      setScribeBusy(false);
+    }
+  };
+
+  const handleScribeApiKeySave = async (apiKey: string) => {
+    setScribeBusy(true);
+    setScribeError(null);
+    try {
+      await updateTranscriptionApiKey(
+        ELEVENLABS_TRANSCRIPTION_PROVIDER_ID,
+        apiKey,
+      );
+      return true;
+    } catch (error) {
+      setScribeError(getScribeErrorMessage(error));
+      return false;
+    } finally {
+      setScribeBusy(false);
+    }
+  };
+
+  const handleScribeApiKeyRemove = async () => {
+    setScribeBusy(true);
+    setScribeError(null);
+    try {
+      if (isScribeActive) {
+        await setTranscriptionProvider(LOCAL_TRANSCRIPTION_PROVIDER_ID);
+      }
+      await updateTranscriptionApiKey(ELEVENLABS_TRANSCRIPTION_PROVIDER_ID, "");
+    } catch (error) {
+      setScribeError(getScribeErrorMessage(error));
+    } finally {
+      setScribeBusy(false);
     }
   };
 
@@ -259,6 +339,21 @@ export const ModelsSettings: React.FC = () => {
       </div>
 
       <div className="space-y-6">
+        <div className="space-y-3">
+          <h2 className="text-sm font-medium text-text/60">
+            {t("settings.scribeProvider.sectionTitle")}
+          </h2>
+          <ScribeProviderCard
+            isActive={isScribeActive}
+            isConfigured={isScribeConfigured}
+            isBusy={scribeBusy}
+            error={scribeError}
+            onActivate={handleScribeActivate}
+            onSaveApiKey={handleScribeApiKeySave}
+            onRemoveApiKey={handleScribeApiKeyRemove}
+          />
+        </div>
+
         {/* Downloaded Models Section — header always visible so filter stays accessible */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">

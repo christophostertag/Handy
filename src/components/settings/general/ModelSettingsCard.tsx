@@ -9,10 +9,35 @@ import {
   CHINESE_LANGUAGE_CODE,
   getUniqueCapabilityLanguages,
 } from "@/lib/constants/languages";
+import { useSettings } from "@/hooks/useSettings";
+import {
+  ELEVENLABS_SCRIBE_MODEL_NAME,
+  ELEVENLABS_TRANSCRIPTION_PROVIDER_ID,
+  getTranscriptionProviderId,
+} from "@/lib/utils/transcriptionProvider";
 
 export const ModelSettingsCard: React.FC = () => {
   const { t } = useTranslation();
   const { currentModel, models } = useModelStore();
+  const { settings } = useSettings();
+  const transcriptionProviderId = getTranscriptionProviderId(settings);
+
+  if (transcriptionProviderId === ELEVENLABS_TRANSCRIPTION_PROVIDER_ID) {
+    return (
+      <SettingsGroup
+        title={t("settings.modelSettings.title", {
+          model: ELEVENLABS_SCRIBE_MODEL_NAME,
+        })}
+      >
+        <LanguageSelector
+          descriptionMode="tooltip"
+          grouped={true}
+          supportedLanguages={[]}
+          supportsLanguageDetection={true}
+        />
+      </SettingsGroup>
+    );
+  }
 
   const currentModelInfo = models.find((m: ModelInfo) => m.id === currentModel);
 

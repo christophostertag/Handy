@@ -1,6 +1,8 @@
 use crate::managers::model::{ModelInfo, ModelManager};
 use crate::managers::transcription::{ModelStateEvent, TranscriptionManager};
-use crate::settings::{get_settings, write_settings, ModelUnloadTimeout};
+use crate::settings::{
+    get_settings, write_settings, ModelUnloadTimeout, LOCAL_TRANSCRIPTION_PROVIDER_ID,
+};
 use log::error;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -116,12 +118,16 @@ pub fn switch_active_model(app: &AppHandle, model_id: &str) -> Result<(), String
     let unload_timeout = settings.model_unload_timeout;
     let old_model = settings.selected_model.clone();
     let old_onboarding_completed = settings.onboarding_completed;
+    let old_transcription_provider = settings.transcription_provider_id.clone();
 
     // Persist the new selection early so the frontend sees the correct model
     // when it reacts to events emitted by load_model.
     let mut settings = settings;
     settings.selected_model = model_id.to_string();
     settings.onboarding_completed = true;
+    if unload_timeout == ModelUnloadTimeout::Immediately {
+        settings.transcription_provider_id = LOCAL_TRANSCRIPTION_PROVIDER_ID.to_string();
+    }
 
     write_settings(app, settings);
 
@@ -139,6 +145,14 @@ pub fn switch_active_model(app: &AppHandle, model_id: &str) -> Result<(), String
                 error: None,
             },
         );
+        let _ = app.emit(
+            "settings-changed",
+            serde_json::json!({
+                "setting": "transcription_provider_id",
+                "value": LOCAL_TRANSCRIPTION_PROVIDER_ID
+            }),
+        );
+        crate::tray::update_tray_menu(app);
         log::info!(
             "Model selection changed to {} (not loading — unload set to Immediately).",
             model_id
@@ -151,9 +165,25 @@ pub fn switch_active_model(app: &AppHandle, model_id: &str) -> Result<(), String
         let mut settings = get_settings(app);
         settings.selected_model = old_model;
         settings.onboarding_completed = old_onboarding_completed;
+        settings.transcription_provider_id = old_transcription_provider;
         write_settings(app, settings);
         return Err(e.to_string());
     }
+
+    // Only make local transcription authoritative after the requested model
+    // has loaded successfully. Until this point an active remote provider
+    // remains usable, and a load failure restores every persisted choice.
+    let mut settings = get_settings(app);
+    settings.transcription_provider_id = LOCAL_TRANSCRIPTION_PROVIDER_ID.to_string();
+    write_settings(app, settings);
+    let _ = app.emit(
+        "settings-changed",
+        serde_json::json!({
+            "setting": "transcription_provider_id",
+            "value": LOCAL_TRANSCRIPTION_PROVIDER_ID
+        }),
+    );
+    crate::tray::update_tray_menu(app);
 
     Ok(())
 }

@@ -37,6 +37,11 @@ interface SettingsStore {
   playTestSound: (soundType: "start" | "stop") => Promise<void>;
   checkCustomSounds: () => Promise<void>;
   setPostProcessProvider: (providerId: string) => Promise<void>;
+  setTranscriptionProvider: (providerId: string) => Promise<void>;
+  updateTranscriptionApiKey: (
+    providerId: string,
+    apiKey: string,
+  ) => Promise<void>;
   updatePostProcessSetting: (
     settingType: "base_url" | "api_key" | "model",
     providerId: string,
@@ -409,6 +414,41 @@ export const useSettingsStore = create<SettingsStore>()(
         await refreshSettings();
       } catch (error) {
         console.error(`Failed to reset binding ${id}:`, error);
+      } finally {
+        setUpdating(updateKey, false);
+      }
+    },
+
+    setTranscriptionProvider: async (providerId) => {
+      const { setUpdating, refreshSettings } = get();
+      const updateKey = "transcription_provider_id";
+
+      setUpdating(updateKey, true);
+      try {
+        const result = await commands.setTranscriptionProvider(providerId);
+        if (result.status === "error") {
+          throw new Error(result.error);
+        }
+        await refreshSettings();
+      } finally {
+        setUpdating(updateKey, false);
+      }
+    },
+
+    updateTranscriptionApiKey: async (providerId, apiKey) => {
+      const { setUpdating, refreshSettings } = get();
+      const updateKey = `transcription_api_key:${providerId}`;
+
+      setUpdating(updateKey, true);
+      try {
+        const result = await commands.changeTranscriptionApiKeySetting(
+          providerId,
+          apiKey,
+        );
+        if (result.status === "error") {
+          throw new Error(result.error);
+        }
+        await refreshSettings();
       } finally {
         setUpdating(updateKey, false);
       }

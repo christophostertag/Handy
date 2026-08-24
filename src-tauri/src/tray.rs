@@ -59,6 +59,7 @@ struct MenuInputs {
     warning: bool,
     model_loaded: bool,
     selected_model: String,
+    uses_local_transcription_provider: bool,
     /// `(id, name)` of downloaded models, sorted by name.
     downloaded_models: Vec<(String, String)>,
     locale: String,
@@ -314,6 +315,7 @@ fn compute_desired(app: &AppHandle, icon_state: TrayIconState) -> TrayDesired {
     let theme = get_current_theme(app);
     let warning = crate::secure_input::tray_warning_active(app);
     let model_loaded = app.state::<Arc<TranscriptionManager>>().is_model_loaded();
+    let uses_local_transcription_provider = settings.uses_local_transcription_provider();
 
     let mut downloaded_models: Vec<(String, String)> = app
         .state::<Arc<ModelManager>>()
@@ -331,6 +333,7 @@ fn compute_desired(app: &AppHandle, icon_state: TrayIconState) -> TrayDesired {
             warning,
             model_loaded,
             selected_model: settings.selected_model,
+            uses_local_transcription_provider,
             downloaded_models,
             locale: settings.app_language,
             update_checks_enabled: settings.update_checks_enabled,
@@ -529,16 +532,21 @@ fn build_menu(app: &AppHandle, inputs: &MenuInputs) -> tauri::Result<(Menu<tauri
         )?
     } else {
         // Build model submenu — label is the active model name
-        let submenu_label = inputs
-            .downloaded_models
-            .iter()
-            .find(|(id, _)| *id == inputs.selected_model)
-            .map(|(_, name)| name.clone())
-            .unwrap_or_else(|| strings.model.clone());
+        let submenu_label = if inputs.uses_local_transcription_provider {
+            inputs
+                .downloaded_models
+                .iter()
+                .find(|(id, _)| *id == inputs.selected_model)
+                .map(|(_, name)| name.clone())
+                .unwrap_or_else(|| strings.model.clone())
+        } else {
+            "Scribe v2 by ElevenLabs".to_string()
+        };
 
         let model_submenu = Submenu::with_id(app, "model_submenu", &submenu_label, true)?;
         for (id, name) in &inputs.downloaded_models {
-            let is_active = *id == inputs.selected_model;
+            let is_active =
+                inputs.uses_local_transcription_provider && *id == inputs.selected_model;
             let item_id = format!("model_select:{}", id);
             let item = CheckMenuItem::with_id(app, &item_id, name, true, is_active, None::<&str>)?;
             model_submenu.append(&item)?;
@@ -679,6 +687,7 @@ mod tests {
             warning: false,
             model_loaded: true,
             selected_model: "small".to_string(),
+            uses_local_transcription_provider: true,
             downloaded_models: vec![("small".to_string(), "Small".to_string())],
             locale: "en".to_string(),
             update_checks_enabled: true,

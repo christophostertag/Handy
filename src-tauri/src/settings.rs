@@ -9,6 +9,9 @@ use tauri_plugin_store::StoreExt;
 
 pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
 pub const APPLE_INTELLIGENCE_DEFAULT_MODEL_ID: &str = "Apple Intelligence";
+pub const LOCAL_TRANSCRIPTION_PROVIDER_ID: &str = "local";
+pub const ELEVENLABS_TRANSCRIPTION_PROVIDER_ID: &str = "elevenlabs";
+pub const ELEVENLABS_DEFAULT_MODEL_ID: &str = "scribe_v2";
 
 #[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "lowercase")]
@@ -371,6 +374,13 @@ pub struct AppSettings {
     pub whats_new_last_seen_version: String,
     #[serde(default = "default_model")]
     pub selected_model: String,
+    /// Interactive transcription provider. The remembered local model remains
+    /// in `selected_model` while a remote provider is active so switching back
+    /// never requires a re-download.
+    #[serde(default = "default_transcription_provider_id")]
+    pub transcription_provider_id: String,
+    #[serde(default = "default_transcription_api_keys")]
+    pub transcription_api_keys: SecretMap,
     #[serde(default)]
     pub onboarding_completed: bool,
     #[serde(default = "default_always_on_microphone")]
@@ -485,6 +495,17 @@ pub struct AppSettings {
 
 fn default_model() -> String {
     "".to_string()
+}
+
+fn default_transcription_provider_id() -> String {
+    LOCAL_TRANSCRIPTION_PROVIDER_ID.to_string()
+}
+
+fn default_transcription_api_keys() -> SecretMap {
+    SecretMap(HashMap::from([(
+        ELEVENLABS_TRANSCRIPTION_PROVIDER_ID.to_string(),
+        String::new(),
+    )]))
 }
 
 const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 2;
@@ -820,6 +841,38 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
     changed
 }
 
+fn ensure_transcription_defaults(settings: &mut AppSettings) -> bool {
+    let mut changed = false;
+
+    if !matches!(
+        settings.transcription_provider_id.as_str(),
+        LOCAL_TRANSCRIPTION_PROVIDER_ID | ELEVENLABS_TRANSCRIPTION_PROVIDER_ID
+    ) {
+        settings.transcription_provider_id = default_transcription_provider_id();
+        changed = true;
+    }
+
+    if !settings
+        .transcription_api_keys
+        .contains_key(ELEVENLABS_TRANSCRIPTION_PROVIDER_ID)
+    {
+        settings.transcription_api_keys.insert(
+            ELEVENLABS_TRANSCRIPTION_PROVIDER_ID.to_string(),
+            String::new(),
+        );
+        changed = true;
+    }
+
+    if settings.transcription_provider_id == ELEVENLABS_TRANSCRIPTION_PROVIDER_ID
+        && settings.elevenlabs_api_key().is_none()
+    {
+        settings.transcription_provider_id = LOCAL_TRANSCRIPTION_PROVIDER_ID.to_string();
+        changed = true;
+    }
+
+    changed
+}
+
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
 
 pub fn get_default_settings() -> AppSettings {
@@ -887,6 +940,8 @@ pub fn get_default_settings() -> AppSettings {
         show_whats_new_on_update: default_show_whats_new_on_update(),
         whats_new_last_seen_version: default_whats_new_last_seen_version(),
         selected_model: "".to_string(),
+        transcription_provider_id: default_transcription_provider_id(),
+        transcription_api_keys: default_transcription_api_keys(),
         onboarding_completed: false,
         always_on_microphone: false,
         selected_microphone: None,
@@ -945,6 +1000,18 @@ impl Default for AppSettings {
 }
 
 impl AppSettings {
+    pub fn uses_local_transcription_provider(&self) -> bool {
+        self.transcription_provider_id == LOCAL_TRANSCRIPTION_PROVIDER_ID
+    }
+
+    pub fn elevenlabs_api_key(&self) -> Option<&str> {
+        self.transcription_api_keys
+            .get(ELEVENLABS_TRANSCRIPTION_PROVIDER_ID)
+            .map(String::as_str)
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
+    }
+
     pub fn active_post_process_provider(&self) -> Option<&PostProcessProvider> {
         self.post_process_providers
             .iter()
@@ -1017,7 +1084,7 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
         default_settings
     };
 
-    if ensure_post_process_defaults(&mut settings) {
+    if ensure_post_process_defaults(&mut settings) | ensure_transcription_defaults(&mut settings) {
         store.set("settings", serde_json::to_value(&settings).unwrap());
     }
 
@@ -1188,6 +1255,8 @@ mod tests {
         assert!(settings.push_to_talk);
         assert!(!settings.audio_feedback);
         assert!(settings.filler_word_removal_enabled);
+        assert!(settings.uses_local_transcription_provider());
+        assert!(settings.elevenlabs_api_key().is_none());
         // Bindings default to empty; the load path merges the real defaults in.
         assert!(settings.bindings.is_empty());
     }
@@ -1570,12 +1639,54 @@ mod tests {
         settings
             .post_process_api_keys
             .insert("empty_provider".to_string(), "".to_string());
+        settings.transcription_api_keys.insert(
+            ELEVENLABS_TRANSCRIPTION_PROVIDER_ID.to_string(),
+            "sk-elevenlabs-secret-key-12345".to_string(),
+        );
 
         let debug_output = format!("{:?}", settings);
 
         assert!(!debug_output.contains("sk-proj-secret-key-12345"));
         assert!(!debug_output.contains("sk-ant-secret-key-67890"));
+        assert!(!debug_output.contains("sk-elevenlabs-secret-key-12345"));
         assert!(debug_output.contains("[REDACTED]"));
+    }
+
+    #[test]
+    fn transcription_defaults_include_elevenlabs_without_enabling_it() {
+        let settings = get_default_settings();
+        assert_eq!(
+            settings.transcription_provider_id,
+            LOCAL_TRANSCRIPTION_PROVIDER_ID
+        );
+        assert_eq!(
+            settings
+                .transcription_api_keys
+                .get(ELEVENLABS_TRANSCRIPTION_PROVIDER_ID),
+            Some(&String::new())
+        );
+    }
+
+    #[test]
+    fn unknown_transcription_provider_is_repaired_without_touching_local_model() {
+        let mut settings = get_default_settings();
+        settings.selected_model = "remembered-local-model".to_string();
+        settings.transcription_provider_id = "removed-provider".to_string();
+
+        assert!(ensure_transcription_defaults(&mut settings));
+        assert!(settings.uses_local_transcription_provider());
+        assert_eq!(settings.selected_model, "remembered-local-model");
+    }
+
+    #[test]
+    fn elevenlabs_provider_without_key_falls_back_to_remembered_local_model() {
+        let mut settings = get_default_settings();
+        settings.selected_model = "remembered-local-model".to_string();
+        settings.transcription_provider_id = ELEVENLABS_TRANSCRIPTION_PROVIDER_ID.to_string();
+
+        assert!(ensure_transcription_defaults(&mut settings));
+        assert!(settings.uses_local_transcription_provider());
+        assert_eq!(settings.selected_model, "remembered-local-model");
     }
 
     #[test]
