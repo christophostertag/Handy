@@ -88,8 +88,16 @@ jobs:
             echo "Build profile: release"
           fi
 
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -226,11 +234,11 @@ jobs:
 
       - name: install frontend dependencies
         if: ${{ !(contains(inputs.platform, 'windows') && contains(inputs.target, 'aarch64')) }}
-        run: bun install
+        run: bun install --frozen-lockfile --ignore-scripts
 
       - name: install frontend dependencies (Windows ARM64)
         if: ${{ contains(inputs.platform, 'windows') && contains(inputs.target, 'aarch64') }}
-        run: bun install --cpu=arm64
+        run: bun install --frozen-lockfile --ignore-scripts --cpu=arm64
 
       - name: rustup install target
         if: ${{ inputs.target != '' && !contains(inputs.target, 'x86_64-unknown-linux-gnu') && !contains(inputs.target, 'aarch64-unknown-linux-gnu') && !contains(inputs.target, 'x86_64-pc-windows-msvc') }}
@@ -341,7 +349,7 @@ jobs:
         if: contains(inputs.platform, 'windows') && !inputs.sign-binaries
         shell: bash
         run: |
-          bun -e "const fs = require('fs'); const path = 'src-tauri/tauri.conf.json'; const config = JSON.parse(fs.readFileSync(path, 'utf8')); if (config.bundle?.windows?.signCommand) delete config.bundle.windows.signCommand; config.bundle.createUpdaterArtifacts = false; fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n');"
+          node -e "const fs = require('fs'); const path = 'src-tauri/tauri.conf.json'; const config = JSON.parse(fs.readFileSync(path, 'utf8')); if (config.bundle?.windows?.signCommand) delete config.bundle.windows.signCommand; config.bundle.createUpdaterArtifacts = false; fs.writeFileSync(path, JSON.stringify(config, null, 2) + '\n');"
 
       - name: Build with Tauri
         uses: tauri-apps/tauri-action@v0
@@ -373,6 +381,7 @@ jobs:
           releaseName: ${{ inputs.release-id && format('v{0}', steps.get-version.outputs.version) || '' }}
           releaseId: ${{ inputs.release-id }}
           assetNamePattern: ${{ steps.patch-release-name.outputs.platform }}
+          tauriScript: npm run tauri
           args: ${{ inputs.build-args }}
 
       - name: Verify macOS dylib bundling
