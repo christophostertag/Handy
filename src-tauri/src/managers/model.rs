@@ -981,7 +981,11 @@ impl ModelManager {
             }
             hasher.update(&buffer[..n]);
         }
-        Ok(format!("{:x}", hasher.finalize()))
+        Ok(hasher
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect())
     }
 
     pub async fn download_model(&self, model_id: &str) -> Result<()> {
@@ -1588,6 +1592,23 @@ mod tests {
         let mut f = File::create(&path).unwrap();
         f.write_all(data).unwrap();
         (dir, path)
+    }
+
+    #[test]
+    fn test_compute_sha256_matches_standard_vectors() {
+        for (data, expected) in [
+            (
+                b"".as_slice(),
+                "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            ),
+            (
+                b"abc".as_slice(),
+                "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+            ),
+        ] {
+            let (_dir, path) = write_temp_file(data);
+            assert_eq!(ModelManager::compute_sha256(&path).unwrap(), expected);
+        }
     }
 
     #[test]

@@ -10,17 +10,19 @@
 //   1. Computes sha256 of bun.lock
 //   2. Compares with stored hash in .nix/bun-lock-hash
 //   3. If they match — nothing to do (~2ms)
-//   4. If they differ — runs `bunx bun2nix` to regenerate .nix/bun.nix
+//   4. If they differ — runs the standalone `bun2nix` converter to regenerate .nix/bun.nix
 //
 // When it runs:
 //   - Automatically via "postinstall" in package.json — triggers after every
 //     bun install / bun add / bun remove / bun update
-//   - Can also be run manually: bun scripts/check-nix-deps.ts
+//   - Can also be run manually: node scripts/check-nix-deps.ts
 //
 // What to commit:
 //   If the script regenerated .nix/bun.nix, commit it together with bun.lock:
 //     git add bun.lock .nix/bun.nix .nix/bun-lock-hash
 
+import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join, resolve } from "path";
 
@@ -40,7 +42,7 @@ if (!existsSync(lockFile)) process.exit(0);
 mkdirSync(nixDir, { recursive: true });
 
 // Compute sha256 of the current bun.lock
-const currentHash = new Bun.CryptoHasher("sha256")
+const currentHash = createHash("sha256")
   .update(readFileSync(lockFile))
   .digest("hex");
 
@@ -57,17 +59,17 @@ console.log(
   `[check-nix-deps] bun.lock has changed, regenerating ${nixFile}...`,
 );
 
-const result = Bun.spawnSync(["bunx", "bun2nix", "-o", nixFile], {
+const result = spawnSync("bun2nix", ["-o", nixFile], {
   cwd: root,
-  stdio: ["inherit", "inherit", "inherit"],
+  stdio: "inherit",
 });
 
-if (result.exitCode !== 0) {
+if (result.status !== 0) {
   console.warn(
-    "[check-nix-deps] Warning: bunx bun2nix failed. .nix/bun.nix may be outdated.",
+    "[check-nix-deps] Warning: bun2nix failed. .nix/bun.nix may be outdated.",
   );
   console.warn(
-    "[check-nix-deps] Nix users: run `bunx bun2nix -o .nix/bun.nix` manually.",
+    "[check-nix-deps] Nix users: run `bun2nix -o .nix/bun.nix` manually.",
   );
   console.warn(
     "[check-nix-deps] Non-Nix users: this is safe to ignore, CI will catch it.",
