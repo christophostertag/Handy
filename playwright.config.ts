@@ -1,5 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const port = Number(process.env.HANDY_PLAYWRIGHT_PORT ?? "1420");
+const baseURL = `http://127.0.0.1:${port}`;
+
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
@@ -8,7 +11,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: "html",
   use: {
-    baseURL: "http://localhost:1420",
+    baseURL,
     trace: "on-first-retry",
   },
   projects: [
@@ -18,9 +21,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "bunx vite dev",
-    url: "http://localhost:1420",
-    reuseExistingServer: !process.env.CI,
+    command: `node scripts/assert-node-runtime.mjs && node node_modules/vite/bin/vite.js --host 127.0.0.1 --port ${port} --strictPort`,
+    url: baseURL,
+    reuseExistingServer: false,
     timeout: 30000,
   },
 });
