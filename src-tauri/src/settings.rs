@@ -11,7 +11,7 @@ pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
 pub const APPLE_INTELLIGENCE_DEFAULT_MODEL_ID: &str = "Apple Intelligence";
 pub const LOCAL_TRANSCRIPTION_PROVIDER_ID: &str = "local";
 pub const ELEVENLABS_TRANSCRIPTION_PROVIDER_ID: &str = "elevenlabs";
-pub const ELEVENLABS_DEFAULT_MODEL_ID: &str = "scribe_v2";
+pub const ELEVENLABS_DEFAULT_MODEL_ID: &str = "scribe_v3";
 
 #[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "lowercase")]

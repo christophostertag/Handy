@@ -10,7 +10,7 @@ export interface ExternalTranscriptionModelProfile {
 }
 
 const ELEVENLABS_PROFILE: ExternalTranscriptionModelProfile = {
-  fullLabel: "Scribe v2 by ElevenLabs",
+  fullLabel: "Scribe v3 by ElevenLabs",
   description:
     "Highest-accuracy cloud transcription with multilingual support.",
   accuracyScore: 1,

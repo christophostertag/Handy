@@ -36,9 +36,9 @@ test.describe("Handy App", () => {
       };
     });
 
-    expect(data.profile.fullLabel).toBe("Scribe v2 by ElevenLabs");
+    expect(data.profile.fullLabel).toBe("Scribe v3 by ElevenLabs");
     expect(data.profile.description).toContain("Highest-accuracy");
-    expect(data.activeName).toBe("Scribe v2 by ElevenLabs");
+    expect(data.activeName).toBe("Scribe v3 by ElevenLabs");
     expect(data.hasKey).toBe(true);
     expect(data.missingKey).toBe(false);
   });
